@@ -1,33 +1,60 @@
 
+module Startup
+
 import Pkg
+using Distributed: addprocs, remotecall, rmprocs
+using TOML: parsefile
+
+const LOG = Expr[]
 
 macro log(expression)
-    startup_log = haskey(ENV, "STARTUP_LOG") ? ENV["STARTUP_LOG"] * ";" : "" 
-    ENV["STARTUP_LOG"] = startup_log * string(expression)
-
-    return expression
+    return last(push!(LOG, expression))
 end
 
-function get_package(obtain_package, access_package, name)
-    isnothing(Base.find_package(name)) && obtain_package(name)
-    @eval @log $(Meta.parse(access_package * " " * name))
-end
-
-@sync @async begin
-    @log ENV["JULIA_EDITOR"] = "code"
-    @log ENV["SHELL"] = "bash"
-
-    get_package(Pkg.add, "import", "Suppressor")
-
-    if isfile("Project.toml")
-        get_package(Pkg.add, "import", "TOML")
-        name = TOML.parsefile("Project.toml")["name"]
-
-        get_package(Pkg.develop, "using", name)
-        get_package(Pkg.add, "using", "Revise")
+function update_packages()
+    worker = first(addprocs(1))
+    remotecall(worker) do
+        redirect_stderr()
+        @log Pkg.update()
     end
+    rmprocs(worker)
+end
+#=
+Source:
+https://discourse.julialang.org/t/what-is-in-your-startup-jl/18228
+=#
 
-    get_package(Pkg.add, "using", "OhMyREPL")
+get_project_name() = parsefile("Project.toml")["name"]
+
+function get_package(obtain_package, name)
+    if isnothing(Base.find_package(name))
+        if obtain_package == "develop"
+            arg = "path = \".\""
+        else
+            arg = "\"" * name * "\""
+        end
+
+        @eval @Startup.log $(Meta.parse("Pkg." * obtain_package * "(" * arg * ")"))
+    end
 end
 
-@async @Suppressor.suppress @log Pkg.update()
+end
+
+@info "`startup.jl` is running - see `Startup.LOG`"
+
+Startup.update_packages()
+
+@Startup.log ENV["JULIA_EDITOR"] = "code"
+@Startup.log ENV["SHELL"] = "bash"
+
+if isfile("Project.toml")
+    name = Startup.get_project_name()
+    Startup.get_package("develop", name)
+    @eval @Startup.log $(Meta.parse("using " * name))
+
+    Startup.get_package("add", "Revise")
+    @Startup.log using Revise
+end
+
+Startup.get_package("add", "OhMyREPL")
+@Startup.log using OhMyREPL
