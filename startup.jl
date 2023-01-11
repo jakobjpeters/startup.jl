@@ -34,7 +34,7 @@ function get_package(obtain_package, name)
             arg = "\"" * name * "\""
         end
 
-        @eval @Startup.log $(Meta.parse("Pkg." * obtain_package * "(" * arg * ")"))
+        @eval Startup.@log $(Meta.parse("Pkg." * obtain_package * "(" * arg * ")"))
     end
 end
 
@@ -44,17 +44,17 @@ end
 
 Startup.update_packages()
 
-@Startup.log ENV["JULIA_EDITOR"] = "code"
-@Startup.log ENV["SHELL"] = "bash"
+Startup.@log ENV["JULIA_EDITOR"] = "code"
+Startup.@log ENV["SHELL"] = "bash"
 
 if isfile("Project.toml")
     name = Startup.get_project_name()
     Startup.get_package("develop", name)
-    @eval @Startup.log $(Meta.parse("using " * name))
+    @eval Startup.@log $(Meta.parse("using " * name))
 
     Startup.get_package("add", "Revise")
-    @Startup.log using Revise
+    Startup.@log using Revise
 end
 
 Startup.get_package("add", "OhMyREPL")
-@Startup.log using OhMyREPL
+Startup.@log using OhMyREPL
