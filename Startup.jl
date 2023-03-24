@@ -10,12 +10,14 @@ macro log(expression)
     return expression
 end
 
+log() = foreach(println ∘ string, LOG)
+
 set_env(key, value) = @eval Startup.@log ENV[$key] = $value
 
 function get_package(name, obtain = "add")
     if isnothing(Base.find_package(name))
-        argument = Dict("add" => "\"" * name * "\"", "develop" => "path = \".\"")[obtain]
-        @eval Startup.@log $(Meta.parse("Pkg." * obtain * "(" * argument * ")"))
+        argument = Dict("add" => reduce(*, ["\"", name, "\""]), "develop" => "path = \".\"")[obtain]
+        @eval Startup.@log $(Meta.parse(reduce(*, ["Pkg.", obtain, "(", argument, ")"])))
     end
 
     @eval Main Startup.@log using $(Symbol(name))
@@ -23,12 +25,9 @@ end
 
 function get_project()
     if isfile("Project.toml")
-        name = redirect_stderr(devnull) do
-            Pkg.activate("")
-            name = Pkg.project().name
-            Pkg.activate()
-            return name
-        end
+        Pkg.activate("", io = devnull)
+        name = Pkg.project().name
+        Pkg.activate(io = devnull)
 
         if !isnothing(name)
             get_package("Revise")
